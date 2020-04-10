@@ -1,0 +1,23 @@
+graph {
+	graph [rankdir=RL]
+	graph [fontname="Roboto Mono"]
+	node [fontname="Roboto Mono"]
+	node [style=rounded]
+	node [shape=box]
+	edge [fontname="Roboto Mono"]
+	w7 [label=<<font color="blue">w7</font><br/>ExpOp<br/>fwd: 2.89<br/>∂w7/∂w6: 2.89>]
+	w7 -- w6
+	w6 [label=<<font color="blue">w6</font><br/>AddOp<br/>fwd: 1.06<br/>∂w6/∂w3: 2.89<br/>∂w6/∂w5: 2.89>]
+	w6 -- w3
+	w6 -- w5
+	w5 [label=<<font color="blue">w5</font><br/>MulOp<br/>fwd: 1.00<br/>∂w5/∂w4: 0.58<br/>∂w5/∂w1: 14.43>]
+	w5 -- w4
+	w5 -- w1
+	w1 [label=<<font color="blue">w1</font><br/>Var<br/>fwd: 0.20<br/>adj: 15.30>]
+	w4 [label=<<font color="blue">w4</font><br/>Number<br/>fwd: 5.00<br/>adj: 0.58>]
+	w3 [label=<<font color="blue">w3</font><br/>MulOp<br/>fwd: 0.06<br/>∂w3/∂w1: 0.87<br/>∂w3/∂w2: 0.58>]
+	w3 -- w1
+	w3 -- w2
+	w2 [label=<<font color="blue">w2</font><br/>Var<br/>fwd: 0.30<br/>adj: 0.58>]
+	w1 [label=<<font color="blue">w1</font><br/>Var<br/>fwd: 0.20<br/>adj: 15.30>]
+}
