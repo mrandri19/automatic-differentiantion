@@ -1,7 +1,8 @@
-from pprinter import PPrinter
 import math
 
 from graphviz import Graph
+
+################################################################################
 
 
 def make_graph():
@@ -13,7 +14,10 @@ def make_graph():
     G.attr("node", style="rounded")
     G.attr("node", shape="box")
     G.attr("edge", fontname=fontname)
+
     return G
+
+################################################################################
 
 
 class IDManager:
@@ -27,9 +31,12 @@ class IDManager:
         self._id_counter += 1
         return new_id
 
+################################################################################
 
-pp = PPrinter()
+
 idm = IDManager()
+
+################################################################################
 
 
 class Op:
@@ -37,7 +44,9 @@ class Op:
         self.id = idm.new_id(self)
         self.parents = []
 
-        self.fwd_val = None
+        self.fwd = None
+
+        self.grad = None
 
     def __repr__(self):
         return self.id
@@ -53,7 +62,11 @@ class NullaryOp(Op):
     def __init__(self):
         super().__init__()
 
-        self.adjoint = 0
+    def backward(self, parent_adjoint):
+        if self.grad is None:
+            self.grad = parent_adjoint
+        else:
+            self.grad += parent_adjoint
 
     def graph(self, G):
         G.node(
@@ -62,13 +75,8 @@ class NullaryOp(Op):
     def node_repr(self):
         return (f"<<font color=\"blue\">{self.id}</font><br/>"
                 f"{self.__class__.__name__}<br/>"
-                f"fwd: {self.fwd_val:.2f}<br/>>")
-
-    def backward_local_grad(self):
-        pass
-
-    def backward(self, parent_adjoint):
-        self.adjoint += parent_adjoint
+                f"fwd: {self.fwd:.2f}<br/>"
+                f"grad: {self.grad:.2f}>")
 
 
 class UnaryOp(Op):
@@ -81,6 +89,13 @@ class UnaryOp(Op):
 
         self.darg = None
 
+    def backward(self, parent_adjoint):
+        if self.grad is None:
+            self.grad = parent_adjoint
+        else:
+            self.grad += parent_adjoint
+        self.arg.backward(self.darg * parent_adjoint)
+
     def graph(self, G):
         G.node(
             self.id, self.node_repr())
@@ -90,7 +105,8 @@ class UnaryOp(Op):
     def node_repr(self):
         return (f"<<font color=\"blue\">{self.id}</font><br/>"
                 f"{self.__class__.__name__}<br/>"
-                f"fwd: {self.fwd_val:.2f}<br/>>")
+                f"fwd: {self.fwd:.2f}<br/>"
+                f"grad: {self.grad:.2f}>")
 
     def edge_repr(self):
         return(f"\u2202{self.id}/\u2202{self.arg.id}: {self.darg:.2f}")
@@ -109,6 +125,14 @@ class BinaryOp(Op):
         self.dlhs = None
         self.drhs = None
 
+    def backward(self, parent_adjoint):
+        if self.grad is None:
+            self.grad = parent_adjoint
+        else:
+            self.grad += parent_adjoint
+        self.lhs.backward(self.dlhs * parent_adjoint)
+        self.rhs.backward(self.drhs * parent_adjoint)
+
     def graph(self, G):
         G.node(
             self.id, self.node_repr())
@@ -120,7 +144,8 @@ class BinaryOp(Op):
     def node_repr(self):
         return (f"<<font color=\"blue\">{self.id}</font><br/>"
                 f"{self.__class__.__name__}<br/>"
-                f"fwd: {self.fwd_val:.2f}<br/>>")
+                f"fwd: {self.fwd:.2f}<br/>"
+                f"grad: {self.grad:.2f}>")
 
     def right_edge_repr(self):
         return f"<\u2202{self.id}/\u2202{self.rhs.id}: {self.drhs:.2f}>"
@@ -128,9 +153,7 @@ class BinaryOp(Op):
     def left_edge_repr(self):
         return f"<\u2202{self.id}/\u2202{self.lhs.id}: {self.dlhs:.2f}>"
 
-    def backward(self, parent_adjoint):
-        self.lhs.backward(self.dlhs * parent_adjoint)
-        self.rhs.backward(self.drhs * parent_adjoint)
+################################################################################
 
 
 class Number(NullaryOp):
@@ -141,11 +164,12 @@ class Number(NullaryOp):
     def node_repr(self):
         return (f"<<font color=\"blue\">{self.id}</font><br/>"
                 f"{self.__class__.__name__}: {self.value}<br/>"
-                f"fwd: {self.fwd_val:.2f}<br/>>")
+                f"fwd: {self.fwd:.2f}<br/>"
+                f"grad: {self.grad:.2f}>")
 
     def forward(self, env):
-        self.fwd_val = self.value
-        return self.fwd_val
+        self.fwd = self.value
+        return self.fwd
 
 
 class Var(NullaryOp):
@@ -156,11 +180,14 @@ class Var(NullaryOp):
     def node_repr(self):
         return (f"<<font color=\"blue\">{self.id}</font><br/>"
                 f"{self.__class__.__name__}: {self.name}<br/>"
-                f"fwd: {self.fwd_val:.2f}<br/>>")
+                f"fwd: {self.fwd:.2f}<br/>"
+                f"grad: {self.grad:.2f}>")
 
     def forward(self, env):
-        self.fwd_val = env[self.name]
-        return self.fwd_val
+        self.fwd = env[self.name]
+        return self.fwd
+
+################################################################################
 
 
 class ExpOp(UnaryOp):
@@ -168,19 +195,15 @@ class ExpOp(UnaryOp):
         super().__init__(arg)
 
     def forward(self, env):
-        self.fwd_val = math.exp(self.arg.forward(env))
-        return self.fwd_val
-
-    def backward_local_grad(self):
-        self.darg = math.exp(self.arg.fwd_val)
-        self.arg.backward_local_grad()
-
-    def backward(self, parent_adjoint):
-        self.arg.backward(self.darg * parent_adjoint)
+        self.fwd = math.exp(self.arg.forward(env))
+        self.darg = math.exp(self.arg.fwd)
+        return self.fwd
 
 
 def exp(arg):
     return ExpOp(arg)
+
+################################################################################
 
 
 class MulOp(BinaryOp):
@@ -188,14 +211,10 @@ class MulOp(BinaryOp):
         super().__init__(lhs, rhs)
 
     def forward(self, env):
-        self.fwd_val = self.lhs.forward(env) * self.rhs.forward(env)
-        return self.fwd_val
-
-    def backward_local_grad(self):
-        self.dlhs = self.rhs.fwd_val
-        self.drhs = self.lhs.fwd_val
-        self.lhs.backward_local_grad()
-        self.rhs.backward_local_grad()
+        self.fwd = self.lhs.forward(env) * self.rhs.forward(env)
+        self.dlhs = self.rhs.fwd
+        self.drhs = self.lhs.fwd
+        return self.fwd
 
 
 class AddOp(BinaryOp):
@@ -203,14 +222,12 @@ class AddOp(BinaryOp):
         super().__init__(lhs, rhs)
 
     def forward(self, env):
-        self.fwd_val = self.lhs.forward(env) + self.rhs.forward(env)
-        return self.fwd_val
-
-    def backward_local_grad(self):
+        self.fwd = self.lhs.forward(env) + self.rhs.forward(env)
         self.dlhs = 1
         self.drhs = 1
-        self.lhs.backward_local_grad()
-        self.rhs.backward_local_grad()
+        return self.fwd
+
+################################################################################
 
 
 # Define the expression
@@ -221,15 +238,11 @@ z = exp(x1*x2 + Number(5)*x1)
 # Run the computation, saving the computed values at each node.
 assert (abs(z.forward({"x1": 0.2, "x2": 0.3}) - math.exp(1.06)) <= 5*1e-15)
 
-# Traverse the computation DAG backwards, calculating the adjoint at each edge.
-# NOTE(Andrea): this could be done in the forward pass but, in general, not in
-# the initialization (e.g. to make the adjoint for the multiplication we need
-# to know the terms which are being multiplied).
-z.backward_local_grad()
-
 # Traverse the computation DAG backwards, at each edge multiplying the parent's
 # adjoint with the edge's adjoint.
-z.backward(1)
+z.backward(1)  # 1 = dz/dz = z̅
+
+################################################################################
 
 G = make_graph()
 z.graph(G)
